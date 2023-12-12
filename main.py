@@ -10,16 +10,19 @@ import asyncio
 from bleak import BleakScanner, BleakClient
 
 class BLEWorker(QThread):
-    def __init__(self, address, characteristic_uuid):
+    def __init__(self, address, channel1_uuid, channel2_uuid):
         super().__init__()
         self.address = address
-        self.characteristic_uuid = characteristic_uuid
-        self.samples_array = np.zeros(28)
-        self.last_data_previous = 0
-        self.last_y_previous = 0 
+        self.channel1_uuid = channel1_uuid
+        self.channel2_uuid = channel2_uuid
+        self.samples_array1 = np.zeros(28)
+        self.samples_array2 = np.zeros(28)
+        self.last_data_previous1 = 0
+        self.last_y_previous1 = 0 
+        self.last_data_previous2 = 0
+        self.last_y_previous2 = 0 
 
     async def notification_handler(self, sender, data):
-        
         hex_data = data.hex()
 
         # Convert hex string to bytes
@@ -49,26 +52,68 @@ class BLEWorker(QThread):
         # Baseline wander removal
         for i in range(len(data_array)):
             if i == 0:
-                self.samples_array[i] = data_array[i] - self.last_data_previous + 0.995 * self.last_y_previous
-                self.last_data_previous = data_array[i]
-                self.last_y_previous = self.samples_array[i]
+                self.samples_array1[i] = data_array[i] - self.last_data_previous1 + 0.995 * self.last_y_previous1
+                self.last_data_previous1 = data_array[i]
+                self.last_y_previous1 = self.samples_array1[i]
             else:
-                self.samples_array[i] = data_array[i] - data_array[i - 1] + 0.995 * self.samples_array[i - 1]
+                self.samples_array1[i] = data_array[i] - data_array[i - 1] + 0.995 * self.samples_array1[i - 1]
                 data_array[i - 1] = data_array[i]
-                self.samples_array[i - 1] = self.samples_array [i]
+                self.samples_array1[i - 1] = self.samples_array1 [i]
                 
-        self.last_data_previous = data_array[-1]
-        self.last_y_previous = self.samples_array[-1]
+        self.last_data_previous1 = data_array[-1]
+        self.last_y_previous1 = self.samples_array1[-1]
+    
+    async def notification_handler2(self, sender, data):
+        hex_data = data.hex()
 
+        # Convert hex string to bytes
+        data_bytes = bytes.fromhex(hex_data)
+
+        # Prepare an empty list to store the converted 24-bit integers
+        data_array = []
+
+        # Iterate over each 3-byte sequence in the data
+        for index in range(0, len(data_bytes), 3):
+            # Make sure there are enough bytes left to form a complete 24-bit integer
+            if index + 3 <= len(data_bytes):
+                # Extract 3 bytes
+                byte1, byte2, byte3 = data_bytes[index:index+3]
+                
+                # Convert them to a 24-bit integer assuming incoming data is big-endian
+                value_24bit = (byte1 << 16) | (byte2 << 8) | byte3
+
+                # Check if the 24-bit integer should be negative
+                if value_24bit & 0x800000:
+                    # Sign extend to 32 bits by setting the upper 8 bits
+                    value_24bit = value_24bit - 0x1000000
+
+                # Append the result to the data_array
+                data_array.append(value_24bit)
+
+        # Baseline wander removal
+        for i in range(len(data_array)):
+            if i == 0:
+                self.samples_array2[i] = data_array[i] - self.last_data_previous2 + 0.995 * self.last_y_previous2
+                self.last_data_previous2 = data_array[i]
+                self.last_y_previous2 = self.samples_array2[i]
+            else:
+                self.samples_array2[i] = data_array[i] - data_array[i - 1] + 0.995 * self.samples_array2[i - 1]
+                data_array[i - 1] = data_array[i]
+                self.samples_array2[i - 1] = self.samples_array2 [i]
+                
+        self.last_data_previous2 = data_array[-1]
+        self.last_y_previous2 = self.samples_array2[-1]
+        
     async def connect_to_ble_device(self):
         try:
             async with BleakClient(self.address) as client:
                 if await client.is_connected():
                     print(f"Connected to {self.address}")
                     
-                    await client.start_notify(self.characteristic_uuid, self.notification_handler)
-                    print(f"Notifications enabled for characteristic {self.characteristic_uuid}")
-
+                    await client.start_notify(self.channel1_uuid, self.notification_handler)
+                    print(f"Notifications enabled for characteristic {self.channel1_uuid}")
+                    await client.start_notify(self.channel2_uuid, self.notification_handler2)
+                    print(f"Notifications enabled for characteristic {self.channel2_uuid}")
                     print("Listening for notifications...")
                     while True:
                         await asyncio.sleep(1)
@@ -133,10 +178,10 @@ class AppMainWindow(QMainWindow):
         # Generate and add a single Matplotlib figure to the grid layout
         self.fig = Figure(figsize=(10, 6))
         self.canvas = FigureCanvas(self.fig)
-        self.ax = self.fig.add_subplot(111)
-        self.ecg_line, = self.ax.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
+        self.ax = self.fig.add_subplot(121)
+        self.ecg_line1, = self.ax.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
         self.ax.set_xlim(0, 375)
-        self.ax.set_ylim(-6000, 6000)
+        self.ax.set_ylim(-15000, 15000)
         self.ax.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
         self.ax.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
         self.ax.xaxis.set_major_locator(MultipleLocator(25))
@@ -147,6 +192,22 @@ class AppMainWindow(QMainWindow):
         # Remove y and x axis labels
         self.ax.set_yticklabels([])
         self.ax.set_xticklabels([])
+
+        # Second plot (Additional Plot)
+        self.ax2 = self.fig.add_subplot(122)  # Second subplot in the first row
+        self.ecg_line2, = self.ax2.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
+        self.ax2.set_xlim(0, 375)  # Set x-axis limits
+        self.ax2.set_ylim(-15000, 15000)  # Set y-axis limits
+        self.ax2.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
+        self.ax2.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
+        self.ax2.xaxis.set_major_locator(MultipleLocator(25))
+        self.ax2.xaxis.set_minor_locator(MultipleLocator(5))
+        self.ax2.yaxis.set_major_locator(MultipleLocator(4000))
+        self.ax2.yaxis.set_minor_locator(MultipleLocator(1000))
+
+        # Remove y and x axis labels for the second plot
+        self.ax2.set_yticklabels([])
+        self.ax2.set_xticklabels([])
 
         # Add the canvas to the grid layout
         self.grid_layout.addWidget(self.canvas, 0, 0)  # Single plot
@@ -166,25 +227,29 @@ class AppMainWindow(QMainWindow):
        # Check if the BLE worker has been initialized and started
         if hasattr(self, 'ble_worker'):
             # Ensure that samples_array has exactly 28 samples
-            if len(self.ble_worker.samples_array) != 28:
+            if len(self.ble_worker.samples_array1) != 28:
                 raise ValueError("samples_array must contain exactly 28 samples")
 
-            current_data = self.ecg_line.get_ydata()
-            updated_data = np.concatenate((current_data[28:], self.ble_worker.samples_array))
+            current_data1 = self.ecg_line1.get_ydata()
+            updated_data1 = np.concatenate((current_data1[28:], self.ble_worker.samples_array1))
+            self.ecg_line1.set_ydata(updated_data1)
 
-            self.ecg_line.set_ydata(updated_data)
+            current_data2 = self.ecg_line2.get_ydata()
+            updated_data2 = np.concatenate((current_data2[28:], self.ble_worker.samples_array2))
+            self.ecg_line2.set_ydata(updated_data2)
+            
             self.canvas.draw()
         else:
             # The ble_worker does not exist yet, so we can't update the plots.
             # This would be a good place to handle this case, such as by logging a message or initializing the plot with zeros.
             pass
 
-            
     @pyqtSlot()
     def scan_devices(self):
         target_address = "6614D41F-1CB3-77FA-3E35-C5A446EA4E3F"
-        characteristic_uuid = "00008171-0000-1000-8000-00805f9b34fb"
-        self.ble_worker = BLEWorker(target_address, characteristic_uuid)
+        channel1_uuid = "00008171-0000-1000-8000-00805f9b34fb"
+        channel2_uuid = "00008172-0000-1000-8000-00805f9b34fb"
+        self.ble_worker = BLEWorker(target_address, channel1_uuid, channel2_uuid)
         self.ble_worker.start()
 
 # Run the application
