@@ -9,16 +9,16 @@ import numpy as np
 import asyncio
 from bleak import BleakScanner, BleakClient
 
-samples_array = np.zeros(28)
-
 class BLEWorker(QThread):
     def __init__(self, address, characteristic_uuid):
         super().__init__()
         self.address = address
         self.characteristic_uuid = characteristic_uuid
+        self.samples_array = np.zeros(28)
+        self.last_data_previous = 0
+        self.last_y_previous = 0 
 
     async def notification_handler(self, sender, data):
-        global samples_array
         
         hex_data = data.hex()
 
@@ -46,8 +46,19 @@ class BLEWorker(QThread):
                 # Append the result to the data_array
                 data_array.append(value_24bit)
 
-        # Print the resulting array of 24-bit signed integers
-        samples_array = [((sample / 16777215) * 2000000) for sample in data_array]
+        # Baseline wander removal
+        for i in range(len(data_array)):
+            if i == 0:
+                self.samples_array[i] = data_array[i] - self.last_data_previous + 0.995 * self.last_y_previous
+                self.last_data_previous = data_array[i]
+                self.last_y_previous = self.samples_array[i]
+            else:
+                self.samples_array[i] = data_array[i] - data_array[i - 1] + 0.995 * self.samples_array[i - 1]
+                data_array[i - 1] = data_array[i]
+                self.samples_array[i - 1] = self.samples_array [i]
+                
+        self.last_data_previous = data_array[-1]
+        self.last_y_previous = self.samples_array[-1]
 
     async def connect_to_ble_device(self):
         try:
@@ -125,7 +136,7 @@ class AppMainWindow(QMainWindow):
         self.ax = self.fig.add_subplot(111)
         self.ecg_line, = self.ax.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
         self.ax.set_xlim(0, 375)
-        self.ax.set_ylim(-10000, -17000)
+        self.ax.set_ylim(-6000, 6000)
         self.ax.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
         self.ax.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
         self.ax.xaxis.set_major_locator(MultipleLocator(25))
@@ -149,24 +160,24 @@ class AppMainWindow(QMainWindow):
         # Timer for updating the plot
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
-        self.timer.start(250)  # Update interval in milliseconds
+        self.timer.start(112)  # Update interval in milliseconds, 112 ms for 28 samples at 250 SPS
 
     def update_plots(self):
-        global samples_array
+       # Check if the BLE worker has been initialized and started
+        if hasattr(self, 'ble_worker'):
+            # Ensure that samples_array has exactly 28 samples
+            if len(self.ble_worker.samples_array) != 28:
+                raise ValueError("samples_array must contain exactly 28 samples")
 
-        # Ensure that samples_array has exactly 28 samples
-        if len(samples_array) != 28:
-            raise ValueError("samples_array must contain exactly 28 samples")
+            current_data = self.ecg_line.get_ydata()
+            updated_data = np.concatenate((current_data[28:], self.ble_worker.samples_array))
 
-        # Shift data to the left and append new samples from samples_array on the right
-        current_data = self.ecg_line.get_ydata()
-        updated_data = np.concatenate((current_data[28:], samples_array))  # Remove the first 28 and append new ones
-        
-        # Update the ECG line with the filtered data
-        self.ecg_line.set_ydata(updated_data)
-
-        # Redraw the canvas with the updated ECG line
-        self.canvas.draw()  # Update the canvas drawing
+            self.ecg_line.set_ydata(updated_data)
+            self.canvas.draw()
+        else:
+            # The ble_worker does not exist yet, so we can't update the plots.
+            # This would be a good place to handle this case, such as by logging a message or initializing the plot with zeros.
+            pass
 
             
     @pyqtSlot()
