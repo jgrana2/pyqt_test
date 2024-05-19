@@ -5,6 +5,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import io
 import matplotlib.image as mpimg
+from lowpass import filter_ecg
+import datetime
 
 # Define the user information and the leads
 user_info = {
@@ -22,7 +24,7 @@ leads = ["I", "aVR", "II", "aVF", "III", "aVL", "V1", "V4", "V2", "V5", "V3", "V
 
 output_path = "output.pdf"
 
-def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_values_ch3, last_values_ch4, last_values_ch5, last_values_ch6, last_values_ch7, last_values_ch8):
+def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_values_ch3, last_values_ch4, last_values_ch5, last_values_ch6, last_values_ch7, last_values_ch8, patient_data):
     """
     Generates a PDF report of ECG leads with user information.
 
@@ -32,6 +34,13 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     - logo_path: path to the logo image file
     - output_path: path where the generated PDF will be saved
     """
+    # Extract patient data
+    first_name = patient_data.get('first_name', 'N/A')
+    last_name = patient_data.get('last_name', 'N/A')
+    gender = patient_data.get('gender', 'N/A')
+    age = patient_data.get('age', 'N/A')
+    height = patient_data.get('height', 'N/A')
+    weight = patient_data.get('weight', 'N/A')
 
     # Set up the PDF buffer
     pdf_buffer = io.BytesIO()
@@ -49,9 +58,24 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     # Add the title and logo
     plt.figtext(0.045, 0.95, '12 Lead Report', ha='left', va='center', fontsize=16, fontname='DIN Alternate')
 
+    # Combine patient data
+    user_info = {
+        "First Name": first_name,
+        "Last Name": last_name,
+        "Gender": gender,
+        "Age": f"{age} years",
+        "Height": f"{height} cm",
+        "Weight": f"{weight} kg",
+        "Heart Rate": "60 bpm",  # Assuming heart rate is not provided in patient_data
+        "Blood Pressure": "105/70 mmHg",  # Assuming blood pressure is not provided in patient_data
+    }
+
     # Split user information into two parts
     left_user_info = {k: user_info[k] for k in list(user_info)[:4]}
     right_user_info = {k: user_info[k] for k in list(user_info)[4:]}
+    
+    # Get the current date
+    current_date = datetime.datetime.now().strftime("%B %d, %Y")
 
     # Add the user information on the left
     plt.figtext(0.05, 0.90, '\n'.join(f"{k}: {v}" for k, v in left_user_info.items()), ha='left', va='top', fontsize=10, fontname='DIN Alternate')
@@ -60,7 +84,7 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     plt.figtext(0.955, 0.90, '\n'.join(f"{k}: {v}" for k, v in right_user_info.items()), ha='right', va='top', fontsize=10, fontname='DIN Alternate')
 
     plt.figtext(0.5, 0.83, "Speed: 25 mm/sec, Amplitude: 10 mm/mV", ha='center', va='center', fontsize=8, fontname='DIN Alternate', color='gray')
-    plt.figtext(0.05, 0.93, "Date: December 9, 2023", ha='left', va='top', fontsize=10, fontname='DIN Alternate')
+    plt.figtext(0.05, 0.93, f"Date: {current_date}", ha='left', va='top', fontsize=10, fontname='DIN Alternate')
 
     # Define the grid for the plots
     grid_size = (6, 2)
@@ -86,48 +110,48 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
         row, col = plot_positions[i]
         ax = plt.subplot2grid(grid_size, (row, col), colspan=1)
         if lead == "I":
-            ax.plot(last_values_ch1, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch1), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "II":
-            ax.plot(last_values_ch2, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch2), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "III":
             # Convert lists to NumPy arrays and perform element-wise subtraction
-            derived_ecg_data = np.array(last_values_ch2) - np.array(last_values_ch1)
+            derived_ecg_data = filter_ecg(np.array(last_values_ch2) - np.array(last_values_ch1))
             ax.plot(derived_ecg_data, 'k-', linewidth=0.5)  # Derived ECG data
             ax.set_title(lead, fontdict=title_font)
         if lead == "aVR":
             # Convert lists to NumPy arrays and perform element-wise subtraction
-            derived_ecg_data = (np.array(last_values_ch1) + np.array(last_values_ch2))/2
+            derived_ecg_data = filter_ecg((np.array(last_values_ch1) + np.array(last_values_ch2))/2)
             ax.plot(derived_ecg_data, 'k-', linewidth=0.5)  # Derived ECG data
             ax.set_title(lead, fontdict=title_font)
         if lead == "aVL":
             # Convert lists to NumPy arrays and perform element-wise subtraction
-            derived_ecg_data = np.array(last_values_ch1) - np.array(last_values_ch2)/2
+            derived_ecg_data = filter_ecg(np.array(last_values_ch1) - np.array(last_values_ch2)/2)
             ax.plot(derived_ecg_data, 'k-', linewidth=0.5)  # Derived ECG data
             ax.set_title(lead, fontdict=title_font)
         if lead == "aVF":
             # Convert lists to NumPy arrays and perform element-wise subtraction
-            derived_ecg_data = np.array(last_values_ch2) - np.array(last_values_ch1)/2
+            derived_ecg_data = filter_ecg(np.array(last_values_ch2) - np.array(last_values_ch1)/2)
             ax.plot(derived_ecg_data, 'k-', linewidth=0.5)  # Derived ECG data
             ax.set_title(lead, fontdict=title_font)
         if lead == "V1":
-            ax.plot(last_values_ch3, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch3), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "V2":
-            ax.plot(last_values_ch4, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch4), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "V3":
-            ax.plot(last_values_ch5, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch5), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "V4":
-            ax.plot(last_values_ch6, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch6), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "V5":
-            ax.plot(last_values_ch7, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch7), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         if lead == "V6":
-            ax.plot(last_values_ch8, 'k-', linewidth=0.5)
+            ax.plot(filter_ecg(last_values_ch8), 'k-', linewidth=0.5)
             ax.set_title(lead, fontdict=title_font)
         
         # Set the same x and y-axis limits for all plots
