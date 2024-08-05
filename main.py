@@ -10,6 +10,7 @@ import numpy as np
 import asyncio
 from bleak import BleakScanner, BleakClient
 from ecg_report_generator import generate_ecg_report
+import pyqtgraph as pg
 
 class PatientDataForm(QDialog):
     def __init__(self):
@@ -468,63 +469,36 @@ class AppMainWindow(QMainWindow):
         self.top_layout.addWidget(self.label_image)
         self.layout.addLayout(self.top_layout)
         self.grid_layout = QGridLayout()
-        self.fig = Figure(figsize=(10, 6))
-        self.canvas = FigureCanvas(self.fig)
         self.create_toolbar()
 
-        self.ax = self.fig.add_subplot(141)
-        self.ecg_line1, = self.ax.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
-        self.ax.set_xlim(0, 375)
-        self.ax.set_ylim(-16000, 16000)
-        self.ax.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
-        self.ax.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
-        self.ax.xaxis.set_major_locator(MultipleLocator(25))
-        self.ax.xaxis.set_minor_locator(MultipleLocator(5))
-        self.ax.yaxis.set_major_locator(MultipleLocator(4000))
-        self.ax.yaxis.set_minor_locator(MultipleLocator(1000))
-        self.ax.set_yticklabels([])
-        self.ax.set_xticklabels([])
-        
-        self.ax2 = self.fig.add_subplot(142)  # Second subplot in the first row
-        self.ecg_line2, = self.ax2.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
-        self.ax2.set_xlim(0, 375)  # Set x-axis limits
-        self.ax2.set_ylim(-16000, 16000)  # Set y-axis limits
-        self.ax2.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
-        self.ax2.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
-        self.ax2.xaxis.set_major_locator(MultipleLocator(25))
-        self.ax2.xaxis.set_minor_locator(MultipleLocator(5))
-        self.ax2.yaxis.set_major_locator(MultipleLocator(4000))
-        self.ax2.yaxis.set_minor_locator(MultipleLocator(1000))
-        self.ax2.set_yticklabels([])
-        self.ax2.set_xticklabels([])
-        
-        self.ax3 = self.fig.add_subplot(143)  # Second subplot in the first row
-        self.ecg_line3, = self.ax3.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
-        self.ax3.set_xlim(0, 375)  # Set x-axis limits
-        self.ax3.set_ylim(-16000, 16000)  # Set y-axis limits
-        self.ax3.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
-        self.ax3.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
-        self.ax3.xaxis.set_major_locator(MultipleLocator(25))
-        self.ax3.xaxis.set_minor_locator(MultipleLocator(5))
-        self.ax3.yaxis.set_major_locator(MultipleLocator(4000))
-        self.ax3.yaxis.set_minor_locator(MultipleLocator(1000))
-        self.ax3.set_yticklabels([])
-        self.ax3.set_xticklabels([])
-        
-        self.ax4 = self.fig.add_subplot(144)  # Second subplot in the first row
-        self.ecg_line4, = self.ax4.plot(np.zeros(375), 'k-', linewidth=0.5)  # Initialize with zeros
-        self.ax4.set_ylim(-16000, 16000)  # Set y-axis limits
-        self.ax4.set_xlim(0, 375)  # Set x-axis limits
-        self.ax4.grid(True, which='major', linestyle='-', linewidth=0.1, color='lightgray')
-        self.ax4.grid(True, which='minor', linestyle=':', linewidth=0.05, color='lightgray')
-        self.ax4.xaxis.set_major_locator(MultipleLocator(25))
-        self.ax4.xaxis.set_minor_locator(MultipleLocator(5))
-        self.ax4.yaxis.set_major_locator(MultipleLocator(4000))
-        self.ax4.yaxis.set_minor_locator(MultipleLocator(1000))
-        self.ax4.set_yticklabels([])
-        self.ax4.set_xticklabels([])
-        
-        self.grid_layout.addWidget(self.canvas, 0, 0)  # Single plot
+        self.plot_widget1 = pg.PlotWidget()
+        self.plot_widget1.setLimits(xMin=0, xMax=375, yMin=-16000, yMax=16000)
+        self.plot_widget1.showGrid(x=True, y=True)
+        self.plot_widget1.setBackground('w')
+        self.ecg_line1 = self.plot_widget1.plot(np.zeros(375), pen=pg.mkPen('k', width=2))
+        self.grid_layout.addWidget(self.plot_widget1, 0, 0)
+
+        self.plot_widget2 = pg.PlotWidget()
+        self.plot_widget2.setLimits(xMin=0, xMax=375, yMin=-16000, yMax=16000)
+        self.plot_widget2.showGrid(x=True, y=True)
+        self.plot_widget2.setBackground('w')
+        self.ecg_line2 = self.plot_widget2.plot(np.zeros(375), pen=pg.mkPen('k', width=2))
+        self.grid_layout.addWidget(self.plot_widget2, 0, 1)
+
+        self.plot_widget3 = pg.PlotWidget()
+        self.plot_widget3.setLimits(xMin=0, xMax=375, yMin=-16000, yMax=16000)
+        self.plot_widget3.showGrid(x=True, y=True)
+        self.plot_widget3.setBackground('w')
+        self.ecg_line3 = self.plot_widget3.plot(np.zeros(375), pen=pg.mkPen('k', width=2))
+        self.grid_layout.addWidget(self.plot_widget3, 0, 2)
+
+        self.plot_widget4 = pg.PlotWidget()
+        self.plot_widget4.setLimits(xMin=0, xMax=375, yMin=-16000, yMax=16000)
+        self.plot_widget4.showGrid(x=True, y=True)
+        self.plot_widget4.setBackground('w')
+        self.ecg_line4 = self.plot_widget4.plot(np.zeros(375), pen=pg.mkPen('k', width=2))
+        self.grid_layout.addWidget(self.plot_widget4, 0, 3)
+
         self.layout.addLayout(self.grid_layout)
         self.central_widget.setLayout(self.layout)
         self.timer = QTimer(self)
@@ -549,21 +523,31 @@ class AppMainWindow(QMainWindow):
         self.toolbar.addAction(report_action)
 
     def update_plots(self):
-       # Check if the BLE worker has been initialized and started
+        # Check if the BLE worker has been initialized and started
         if hasattr(self, 'ble_worker'):
-            current_data1 = self.ecg_line1.get_ydata()
-            updated_data1 = np.concatenate((current_data1[28:], self.ble_worker.samples_array1))
-            self.ecg_line1.set_ydata(updated_data1)
-            current_data2 = self.ecg_line2.get_ydata()
-            updated_data2 = np.concatenate((current_data2[28:], self.ble_worker.samples_array2))
-            self.ecg_line2.set_ydata(updated_data2)
-            current_data3 = self.ecg_line3.get_ydata()
-            updated_data3 = np.concatenate((current_data3[28:], self.ble_worker.samples_array3))
-            self.ecg_line3.set_ydata(updated_data3)
-            current_data4 = self.ecg_line4.get_ydata()
-            updated_data4 = np.concatenate((current_data4[28:], self.ble_worker.samples_array4))
-            self.ecg_line4.set_ydata(updated_data4)
-            self.canvas.draw()
+            current_data1 = self.ecg_line1.getData()[1]
+            updated_data1 = np.roll(current_data1, -28)
+            updated_data1[-28:] = self.ble_worker.samples_array1
+            self.ecg_line1.setData(updated_data1)
+            self.plot_widget1.update()
+            
+            current_data2 = self.ecg_line2.getData()[1]
+            updated_data2 = np.roll(current_data2, -28)
+            updated_data2[-28:] = self.ble_worker.samples_array2
+            self.ecg_line2.setData(updated_data2)
+            self.plot_widget2.update()
+
+            current_data3 = self.ecg_line3.getData()[1]
+            updated_data3 = np.roll(current_data3, -28)
+            updated_data3[-28:] = self.ble_worker.samples_array3
+            self.ecg_line3.setData(updated_data3)
+            self.plot_widget3.update()
+            
+            current_data4 = self.ecg_line4.getData()[1]
+            updated_data4 = np.roll(current_data4, -28)
+            updated_data4[-28:] = self.ble_worker.samples_array4
+            self.ecg_line4.setData(updated_data4)
+            self.plot_widget4.update()
         else:
             pass
 
