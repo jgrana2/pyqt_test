@@ -1,8 +1,8 @@
 import sys
-from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QSpinBox, QComboBox,
-                             QWidget, QPushButton, QGridLayout, QAction, QFormLayout, QLineEdit, QDialog, QDialogButtonBox)
-from PyQt5.QtGui import QPixmap, QFont, QIcon
-from PyQt5.QtCore import Qt, QTimer, pyqtSlot, QThread
+from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QSpinBox, QComboBox, QMessageBox,
+                             QWidget, QPushButton, QGridLayout, QAction, QFormLayout, QLineEdit, QDialog)
+from PyQt5.QtGui import QPixmap, QFont, QIcon, QDesktopServices
+from PyQt5.QtCore import Qt, QTimer, pyqtSlot, QThread, QUrl, pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator
@@ -20,44 +20,44 @@ class PatientDataForm(QDialog):
         self.layout = QFormLayout()
 
         # First Name
-        self.first_name_label = QLabel('First Name:')
+        self.first_name_label = QLabel('Nombres:')
         self.first_name_input = QLineEdit()
         self.layout.addRow(self.first_name_label, self.first_name_input)
 
         # Last Name
-        self.last_name_label = QLabel('Last Name:')
+        self.last_name_label = QLabel('Apellidos:')
         self.last_name_input = QLineEdit()
         self.layout.addRow(self.last_name_label, self.last_name_input)
 
         # Gender
-        self.gender_label = QLabel('Gender:')
+        self.gender_label = QLabel('Género:')
         self.gender_input = QComboBox()
-        self.gender_input.addItems(["Male", "Female", "Other"])
+        self.gender_input.addItems(["Masculino", "Femenino", "Otro"])
         self.layout.addRow(self.gender_label, self.gender_input)
 
         # Age
-        self.age_label = QLabel('Age:')
+        self.age_label = QLabel('Edad:')
         self.age_input = QSpinBox()
         self.age_input.setRange(0, 150)
         self.age_input.setValue(31)
         self.layout.addRow(self.age_label, self.age_input)
 
         # Height
-        self.height_label = QLabel('Height (cm):')
+        self.height_label = QLabel('Estatura (cm):')
         self.height_input = QSpinBox()
         self.height_input.setRange(0, 300)
         self.height_input.setValue(156)
         self.layout.addRow(self.height_label, self.height_input)
 
         # Weight
-        self.weight_label = QLabel('Weight (kg):')
+        self.weight_label = QLabel('Peso (kg):')
         self.weight_input = QSpinBox()
         self.weight_input.setRange(0, 500)
         self.weight_input.setValue(60)
         self.layout.addRow(self.weight_label, self.weight_input)
 
         # Submit Button
-        self.submit_button = QPushButton('Submit')
+        self.submit_button = QPushButton('Guardar')
         self.submit_button.clicked.connect(self.submit_form)
         self.layout.addRow(self.submit_button)
 
@@ -78,7 +78,18 @@ class PatientDataForm(QDialog):
     def get_patient_data(self):
         return self.patient_data
 
+class DeviceConnectionDialog(QDialog):
+    def __init__(self, parent=None):
+        super(DeviceConnectionDialog, self).__init__(parent)
+        self.setWindowTitle("Estado de la Conexión")
+        self.layout = QVBoxLayout(self)
+        self.label = QLabel("Conectándose al dispositivo...", self)
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
 class BLEWorker(QThread):
+    connection_status_signal = pyqtSignal(bool)
+    error_signal = pyqtSignal(str)
     def __init__(self, address, channel1_uuid, channel2_uuid, channel3_uuid, channel4_uuid, channel5_uuid, channel6_uuid, channel7_uuid, channel8_uuid):
         super().__init__()
         self.address = address
@@ -397,9 +408,12 @@ class BLEWorker(QThread):
             self.buffer_idx = 0
         
     async def connect_to_ble_device(self):
+        self.connection_status_signal.emit(False)
         try:
             async with BleakClient(self.address) as client:
-                if await client.is_connected():
+                await client.connect()
+                if client.is_connected():
+                    self.connection_status_signal.emit(True)
                     print(f"Connected to {self.address}")
                     await client.start_notify(self.channel1_uuid, self.notification_handler)
                     print(f"Notifications enabled for characteristic {self.channel1_uuid}")
@@ -420,9 +434,9 @@ class BLEWorker(QThread):
                     while True:
                         await asyncio.sleep(1)
                 else:
-                    print(f"Failed to connect to {self.address}")
+                    self.error_signal.emit("Failed to connect.")
         except Exception as e:
-            print(f"An error occurred: {e}")
+            self.error_signal.emit(f"An error occurred: {e}")
 
     def run(self):
         loop = asyncio.new_event_loop()
@@ -432,14 +446,15 @@ class BLEWorker(QThread):
 class AppMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.device_connection_dialog = DeviceConnectionDialog()
         # Set up the main window
-        self.setWindowTitle('Horizon Medical ECG Report Generator v0.1')
+        self.setWindowTitle('Generador de Reportes ECG v0.1')
         self.setGeometry(100, 100, 1024, 400)  # Increased size for ECG plots
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout()
         self.top_layout = QHBoxLayout()
-        self.label_title = QLabel('ECG Report Generator', self)
+        self.label_title = QLabel('Generador de Reportes ECG', self)
         self.label_title.setAlignment(Qt.AlignLeft)
         font = QFont()
         font.setPointSize(18)
@@ -521,18 +536,18 @@ class AppMainWindow(QMainWindow):
         self.toolbar = self.addToolBar('Tools')
         
         # Create actions for the toolbar (without icons)
-        connect_action = QAction('Connect to Device', self)
+        connect_action = QAction('Conectarse al Dispositivo', self)
         connect_action.triggered.connect(self.scan_devices)
         self.toolbar.addAction(connect_action)
 
-        report_action = QAction('Generate Report', self)
-        report_action.triggered.connect(self.read_last_values)
-        self.toolbar.addAction(report_action)
-        
-        patient_data_action = QAction('Input Patient Data', self)
+        patient_data_action = QAction('Datos del Paciente', self)
         patient_data_action.triggered.connect(self.input_patient_data)
         self.toolbar.addAction(patient_data_action)
- 
+
+        report_action = QAction('Generar Reporte', self)
+        report_action.triggered.connect(self.read_last_values)
+        self.toolbar.addAction(report_action)
+
     def update_plots(self):
        # Check if the BLE worker has been initialized and started
         if hasattr(self, 'ble_worker'):
@@ -562,10 +577,24 @@ class AppMainWindow(QMainWindow):
         channel5_uuid = "00008175-0000-1000-8000-00805f9b34fb"
         channel6_uuid = "00008176-0000-1000-8000-00805f9b34fb"
         channel7_uuid = "00008177-0000-1000-8000-00805f9b34fb"
-        channel8_uuid = "00008178-0000-1000-8000-00805f9b34fb"
+        channel8_uuid = "00008178-0000-1000-8000-00805f9b34fb"        
         self.ble_worker = BLEWorker(target_address, channel1_uuid, channel2_uuid, channel3_uuid, channel4_uuid, channel5_uuid, channel6_uuid, channel7_uuid, channel8_uuid)
+        self.ble_worker.connection_status_signal.connect(self.handle_connection_status)
+        self.ble_worker.error_signal.connect(self.handle_error_message)
         self.ble_worker.start()
-    
+
+    @pyqtSlot(bool)
+    def handle_connection_status(self, is_connected):
+        if is_connected:
+            self.device_connection_dialog.close()
+        else:
+            self.device_connection_dialog.show()
+
+    @pyqtSlot(str)
+    def handle_error_message(self, message):
+        self.device_connection_dialog.label.setText(message)
+        QTimer.singleShot(3000, self.device_connection_dialog.close)  # Close dialog after 3 seconds
+
     @pyqtSlot()
     def read_last_values(self):
         last_values_ch1 = []
@@ -617,6 +646,9 @@ class AppMainWindow(QMainWindow):
             print(f"An unexpected error occurred: {e}")
 
         generate_ecg_report("output.pdf", last_values_ch1, last_values_ch2, last_values_ch3, last_values_ch4, last_values_ch5, last_values_ch6, last_values_ch7, last_values_ch8, self.patient_data_form.patient_data)
+        # Show success dialog box and open PDF file
+        QMessageBox.information(self, "Success", "Reporte generado exitosamente", QMessageBox.Ok)
+        QDesktopServices.openUrl(QUrl.fromLocalFile("output.pdf"))
 
     @pyqtSlot()
     def input_patient_data(self):

@@ -56,18 +56,18 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     fig.figimage(logo, xo=690, yo=1085)
 
     # Add the title and logo
-    plt.figtext(0.045, 0.95, '12 Lead Report', ha='left', va='center', fontsize=16, fontname='DIN Alternate')
+    plt.figtext(0.045, 0.95, 'Reporte de 12 Derivadas', ha='left', va='center', fontsize=16, fontname='DIN Alternate')
 
     # Combine patient data
     user_info = {
-        "First Name": first_name,
-        "Last Name": last_name,
-        "Gender": gender,
-        "Age": f"{age} years",
-        "Height": f"{height} cm",
-        "Weight": f"{weight} kg",
-        "Heart Rate": "60 bpm",  # Assuming heart rate is not provided in patient_data
-        "Blood Pressure": "105/70 mmHg",  # Assuming blood pressure is not provided in patient_data
+        "Nombres": first_name,
+        "Apellido": last_name,
+        "Género": gender,
+        "Edad": f"{age} años",
+        "Estatura": f"{height} cm",
+        "Peso": f"{weight} kg",
+        "Ritmo Cardíaco": "60 bpm",  # Assuming heart rate is not provided in patient_data
+        "Presión Sanguínea": "105/70 mmHg",  # Assuming blood pressure is not provided in patient_data
     }
 
     # Split user information into two parts
@@ -75,7 +75,7 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     right_user_info = {k: user_info[k] for k in list(user_info)[4:]}
     
     # Get the current date
-    current_date = datetime.datetime.now().strftime("%B %d, %Y")
+    current_date = datetime.datetime.now().strftime("%B %d, %Y").title()
 
     # Add the user information on the left
     plt.figtext(0.05, 0.90, '\n'.join(f"{k}: {v}" for k, v in left_user_info.items()), ha='left', va='top', fontsize=10, fontname='DIN Alternate')
@@ -83,8 +83,8 @@ def generate_ecg_report(output_path, last_values_ch1, last_values_ch2, last_valu
     # Add the user information on the right
     plt.figtext(0.955, 0.90, '\n'.join(f"{k}: {v}" for k, v in right_user_info.items()), ha='right', va='top', fontsize=10, fontname='DIN Alternate')
 
-    plt.figtext(0.5, 0.83, "Speed: 25 mm/sec, Amplitude: 10 mm/mV", ha='center', va='center', fontsize=8, fontname='DIN Alternate', color='gray')
-    plt.figtext(0.05, 0.93, f"Date: {current_date}", ha='left', va='top', fontsize=10, fontname='DIN Alternate')
+    plt.figtext(0.5, 0.83, "Velocidad: 25 mm/sec, Amplitud: 10 mm/mV", ha='center', va='center', fontsize=8, fontname='DIN Alternate', color='gray')
+    plt.figtext(0.05, 0.93, f"Fecha: {current_date}", ha='left', va='top', fontsize=10, fontname='DIN Alternate')
 
     # Define the grid for the plots
     grid_size = (6, 2)
