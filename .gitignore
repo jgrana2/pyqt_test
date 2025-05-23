@@ -3,3 +3,4 @@ environment/
 __pycache__/
 data_record_ch*.txt
 output.pdf
+env/

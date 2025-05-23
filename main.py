@@ -11,6 +11,8 @@ import asyncio
 from bleak import BleakScanner, BleakClient
 from ecg_report_generator import generate_ecg_report
 import pyqtgraph as pg
+import json
+import websockets
 
 class PatientDataForm(QDialog):
     def __init__(self):
@@ -127,6 +129,9 @@ class BLEWorker(QThread):
         self.last_data_previous8 = 0
         self.last_y_previous8 = 0
         self.buffer_idx = 0
+        self.ws_url = "wss://hrzmed.org"
+        self.ws = None
+        self.channel_buffers = [[] for _ in range(8)]
 
     async def notification_handler(self, sender, data):
         if self.buffer_idx == 0:
@@ -406,11 +411,46 @@ class BLEWorker(QThread):
                 for value in self.samples_array8:
                     file.write(f'{value}\n')  # Write each value on a new line
                     
+            # Append samples to channel buffers
+            self.channel_buffers[0].extend(self.samples_array1.tolist())
+            self.channel_buffers[1].extend(self.samples_array2.tolist())
+            self.channel_buffers[2].extend(self.samples_array3.tolist())
+            self.channel_buffers[3].extend(self.samples_array4.tolist())
+            self.channel_buffers[4].extend(self.samples_array5.tolist())
+            self.channel_buffers[5].extend(self.samples_array6.tolist())
+            self.channel_buffers[6].extend(self.samples_array7.tolist())
+            self.channel_buffers[7].extend(self.samples_array8.tolist())
+            # Send when we have at least 250 samples
+            if len(self.channel_buffers[0]) >= 250:
+                data_packet = {
+                    "type": "ecg_chunk",
+                    "data": {
+                        "channel1": self.channel_buffers[0][:250],
+                        "channel2": self.channel_buffers[1][:250],
+                        "channel3": self.channel_buffers[2][:250],
+                        "channel4": self.channel_buffers[3][:250],
+                        "channel5": self.channel_buffers[4][:250],
+                        "channel6": self.channel_buffers[5][:250],
+                        "channel7": self.channel_buffers[6][:250],
+                        "channel8": self.channel_buffers[7][:250],
+                    }
+                }
+                await self.ws.send(json.dumps(data_packet))
+                # Remove sent samples
+                for i in range(8):
+                    self.channel_buffers[i] = self.channel_buffers[i][250:]
             self.buffer_idx = 0
         
     async def connect_to_ble_device(self):
         self.connection_status_signal.emit(False)
         try:
+            # Only connect if not already connected
+            if self.ws is None or self.ws.closed:
+                self.ws = await websockets.connect(self.ws_url)
+                self.error_signal.emit(f"WebSocket connection established to {self.ws_url}")
+            else:
+                self.error_signal.emit(f"WebSocket already connected to {self.ws_url}")
+                
             async with BleakClient(self.address) as client:
                 await client.connect()
                 if client.is_connected():
@@ -505,6 +545,7 @@ class AppMainWindow(QMainWindow):
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(112)  # Update interval in milliseconds, 112 ms for 28 samples at 250 SPS
 
+        self.scan_devices()
     def create_toolbar(self):
         # Initialize the toolbar
         self.toolbar = self.addToolBar('Tools')
